@@ -1,8 +1,8 @@
 ---
 layout:     post
-title:      "Welcome to Hux Blog"
+title:      "Welcome to Hexi Blog"
 subtitle:   " \"Hello World, Hello Blog\""
-date:       2015-01-29 12:00:00
+date:       2018-09-10 20:48:00
 author:     "Hux"
 header-img: "img/post-bg-2015.jpg"
 commments:  true
