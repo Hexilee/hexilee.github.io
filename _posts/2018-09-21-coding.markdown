@@ -4,7 +4,7 @@ title:      "编码：字符串和二进制"
 subtitle:   "Encoding: String and Binary"
 date:       2018-09-21 19:48:00
 author:     "Hexi"
-header-img: "img/bg/2018-09-21-coding-bg.jpg
+header-img: "img/bg/2018-09-21-coding-bg.jpg"
 tags:
     - Encoding
 ---
