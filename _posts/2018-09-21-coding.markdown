@@ -9,4 +9,28 @@ tags:
     - Encoding
 ---
 
+#### Introduction
+
+计算机是如何储存数据的？
+
+毫无疑问，对现代计算机来说，数据的基本单元是位（`bit`），即一位二进制数，值为 `0` 或 `1`。那用枯燥的二进制如何描述出文字、图片、视频等丰富多彩的内容呢？
+
+我最初了解计算机相关知识时，这是最吸引我的问题，而它最简洁的答案就是编码。
+
+编码是计算机的基石，其内容十分庞大，本篇文章不可能涉及太多，仅仅介绍字符串的相关内容。
+
+#### 字符集
+
+[字符集](https://baike.baidu.com/item/%E5%AD%97%E7%AC%A6%E9%9B%86) 顾名思义就是字符的集合，或者说是数字到字符的映射。在计算机发展的早期 [ASCII](https://baike.baidu.com/item/ASCII) 渐渐地成为了标准，而现在最常用的字符集则是 [Unicode](https://baike.baidu.com/item/Unicode)。
+
+##### ASCII
+
+ASCII 使用一个 `byte(1 byte = 8 bits)` 代表一个字符，其范围是 `0x00 - 0x7F` （即十进制的 `0 - 127`），其中有 33 个不可见字符和 95 个可见字符。
+
+![ASCII](/img/in-post/ascii.jpg){:class="img-responsive"}
+
+
+
+
+
 
