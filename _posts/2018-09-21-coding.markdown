@@ -176,7 +176,7 @@ b'\xe5\xad\x97\xe7\xac\xa6\xe7\xbc\x96\xe7\xa0\x81'
 
 
 
-当然，除 UTF-8 之外，UTF 家族还有 UTF-16 和 UTF-32 编码；除 UTF 之外还有其它用于编码 Unicode 的编码，如 USC 系列；此外还有很多不使用 Unicode 字符集的编码，如我国独创的 GBK 系列编码，但目前最通用的还是 UTF-8。
+当然，除 UTF-8 之外，UTF 家族还有 UTF-16 和 UTF-32 编码（还有下文提到的 UTF-7）；除 UTF 之外还有其它用于编码 Unicode 的编码，如 USC 系列；此外还有很多不使用 Unicode 字符集的编码，如我国独创的 GBK 系列编码，但目前最通用的还是 UTF-8。
 
 UTF-8 的主要优点有：
 
@@ -185,6 +185,84 @@ UTF-8 的主要优点有：
 - 相对节省空间：空间浪费范围为 `0% ~ 33.3%`
 
 关于 UTF-8 具体的优缺点及其他编码相关内容，可以自行查看 Wiki。
+
+#### 后记：历史遗留
+
+虽然 UTF 系列编码已经成了字符编码的标准，但总有一些上古年代的走过来的软件或协议并不支持 UTF，比如 [SMTP](https://www.wikiwand.com/zh-sg/%E7%AE%80%E5%8D%95%E9%82%AE%E4%BB%B6%E4%BC%A0%E8%BE%93%E5%8D%8F%E8%AE%AE) 最早仅支持 `7-bit encoding` 即 ASCII。
+
+那在这种情况下如何使用非 ASCII 字符呢？
+
+当然是把 `8-bit bytes` 编码到 `7-bit bytes`，其中最常用的编码就是 [Base64](https://www.wikiwand.com/zh-sg/Base64)。
+
+##### Base64
+
+Base 家族常见的有 Base64, Base32, Base16 三种编码，他们的编码规则大致相同，最常用的是 Base64 编码。
+
+Base64 的编码规则简单来说就是把三个字节一共 `3 x 8 = 24` 个字节拆成 四个字节。
+
+```
+wwwwwwxx xxxxyyyy yyzzzzzz ==> 00wwwwww 00xxxxxx 00yyyyyy 00 zzzzzz
+```
+
+当字节总数不能被 3 整除，在后面补 0，再根据缺少的字节数在编码后文本添加 1 到 2 个 `=`
+
+- 剩 1 个字节
+
+```
+yyyyyyzz ==> 00yyyyyy 00zz0000
+# 最后以 == 结尾
+```
+
+- 剩 2 个字节
+
+```
+xxxxxxyy yyyyzzzz ==> 00xxxxxx 00yyyyyy 00zzzz00
+
+# 最后以 = 结尾 
+```
+
+那如何表示拆开后的字节呢？
+
+我们可以看到，由于最高的两位用 0 填充，每个字节的取值范围是 `0 - 63`，base64 规定，`0 - 63` 分别对应 `ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/`
+
+```python
+>>> import base64
+>>> base64.b64encode('字符编码'.encode())
+b'5a2X56ym57yW56CB'
+>>> base64.b64encode('字符编码X'.encode())
+b'5a2X56ym57yW56CBWA=='
+>>> base64.b64encode('字符编码XX'.encode())
+b'5a2X56ym57yW56CBWFg='
+```
+
+即
+
+```python
+'字符编码'
+==>
+b'\xe5\xad\x97\xe7\xac\xa6\xe7\xbc\x96\xe7\xa0\x81'
+==>
+11100101 10101101 10010111
+11100111 10101100 10100110
+11100111 10111100 10010110
+11100111 10100000 10000001
+==>
+00111001 00011010 00110110 00010111
+00111001 00111010 00110010 00100110
+00111001 00111011 00110010 00010110
+00111001 00111010 00000010 00000001
+==>
+'5a2X56ym57yW56CB'
+```
+
+base 系列编码并不属于字符编码，他们主要用于把一串“无意义的”八位二进制字节编码为可见 ASCII 字符。base64 大概浪费了 `25%` 的空间，base32 是 `37.5%`，base16 是 `50%`。
+
+> “无意义” 是指，base 编码可编码任意二进制而无需知道其意义。
+
+**UTF-7** 则是 UTF16 和 Base64 的组合产物，其内容可以自行搜索。
+
+最后我有一个问题，如果从节省空间的角度考虑，为什么不用 base128 呢？
+
 
 
 
