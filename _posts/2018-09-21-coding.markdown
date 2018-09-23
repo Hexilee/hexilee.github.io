@@ -223,7 +223,13 @@ xxxxxxyy yyyyzzzz ==> 00xxxxxx 00yyyyyy 00zzzz00
 
 那如何表示拆开后的字节呢？
 
-我们可以看到，由于最高的两位用 0 填充，每个字节的取值范围是 `0 - 63`，base64 规定，`0 - 63` 分别对应 `ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/`
+我们可以看到，由于最高的两位用 0 填充，每个字节的取值范围是 `0 - 63`，base64 规定，`0 - 63` 分别对应 
+
+```
+
+ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/
+
+```
 
 ```python
 >>> import base64
