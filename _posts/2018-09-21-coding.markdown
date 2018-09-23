@@ -44,7 +44,7 @@ ASCII 使用一个 `byte(1 byte = 8 bits)` 代表一个字符，但不使用最�
 
 ASCII 只能显示26个基本拉丁字母、阿拉伯数目字和英式标点符号，因此只能用于显示现代美国英语。而随着计算机的飞速发展，ASCII 的局限性变得越来越明显。
 
-后面出现了 [EASCII (Extended ASCII)](https://baike.baidu.com/item/EASCII)，即把 ASCII 扩充为 7 位，表示范围是 `0x00 - 0xFF`（即十进制 `0 - 255`）。EASCII 解决了部分西欧语言的显示问题，但对更多其他语言依然无能为力。
+后面出现了 [EASCII (Extended ASCII)](https://baike.baidu.com/item/EASCII)，即把 ASCII 扩充为 8 位，表示范围是 `0x00 - 0xFF`（即十进制 `0 - 255`）。EASCII 解决了部分西欧语言的显示问题，但对更多其他语言依然无能为力。
 
 而现在成为业界标准的 Unicode 对世界上大部分的文字系统（甚至 emoji）进行了整理、编码，使得电脑可以用更为简单的方式来呈现和处理文字。
 
