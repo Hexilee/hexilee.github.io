@@ -331,6 +331,6 @@ class Platform {
 
 使用 `JRE-1.8` 的 `API signature` 覆盖了父项目的的 `JRE-1.6`，测试通过
 
-![TEST SUCCESS](img/in-post/2018-09-27/test-success.png){:class="img-responsive"}
+![TEST SUCCESS](/img/in-post/2018-09-27/test-success.png){:class="img-responsive"}
 
 
