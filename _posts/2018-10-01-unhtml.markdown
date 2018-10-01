@@ -183,7 +183,7 @@ func main() {
 
 就能得到结果
 
-```json
+```js
 {
   "Slice": [
     0,
