@@ -52,7 +52,6 @@ var AllTypeHTML = []byte(`
 如果你想把它解析为一个结构体
 
 ```go
-
 package example
 
 type (
@@ -71,13 +70,11 @@ type (
 		LikeLemon bool   
 	}
 )
-
 ```
 
 直接用 `goquery` 要这样写
 
 ```go
-
 package example
 
 import (
@@ -133,7 +130,6 @@ func parsePartTypesLogically() (PartTypesStruct, error) {
 	}
 	return partTypes, err
 }
-
 ```
 
 写得很难受
@@ -141,7 +137,6 @@ func parsePartTypesLogically() (PartTypesStruct, error) {
 而现在你只要这么写
 
 ```go
-
 package main
 
 import (
