@@ -1,6 +1,6 @@
 ---
 layout:     post
-title:      "UnHTML: HTML 与结构体的映射"
+title:      "UnHTML: HTML 到结构体的映射"
 subtitle:   "An efficient HTML unmarshaler for golang"
 date:       2018-10-01 22:48:00
 author:     "Hexi"
