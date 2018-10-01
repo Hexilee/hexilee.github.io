@@ -51,7 +51,8 @@ var AllTypeHTML = []byte(`
 
 如果你想把它解析为一个结构体
 
-```go
+```golang
+
 package example
 
 type (
@@ -70,11 +71,13 @@ type (
 		LikeLemon bool   
 	}
 )
+
 ```
 
 直接用 `goquery` 要这样写
 
-```go
+```golang
+
 package example
 
 import (
@@ -137,7 +140,8 @@ func parsePartTypesLogically() (PartTypesStruct, error) {
 
 而现在你只要这么写
 
-```go
+```golang
+
 package main
 
 import (
@@ -201,7 +205,7 @@ func main() {
 
 开发效率大大提升！但毫无疑问用了大量反射，让人担心它的运行效率。于是我写了两个 `Benchmarks`
 
-```go
+```golang
 func BenchmarkUnmarshalPartTypes(b *testing.B) {
 	assert.NotNil(b, AllTypeHTML)
 	for i := 0; i < b.N; i++ {
