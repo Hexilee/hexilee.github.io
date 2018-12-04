@@ -21,9 +21,9 @@ tags:
 - 高效地拿到 `HTML`
 - 高效地解析 `HTML`
 
-目前来看，最接近我第一个需求的项目就是 [`retrofit`](https://github.com/square/retrofit)，而能满足第二个需求的好像并找不到。
+目前来看，最接近我第一个需求的项目就是 [retrofit](https://github.com/square/retrofit)，而能满足第二个需求的好像并找不到。
 
-找不到就只能自己造咯，由于最早不想写 `Java`，我两个月前造出了 `unhtml`（见[上一篇文章](https://hexilee.me/2018/10/01/unhtml/)）和 [`gotten`](https://github.com/Hexilee/gotten)。
+找不到就只能自己造咯，由于最早不想写 `Java`，我两个月前造出了 `unhtml`（见[上一篇文章](https://hexilee.me/2018/10/01/unhtml/)）和 [gotten](https://github.com/Hexilee/gotten)。
 
 `unhtml` 就不多介绍了，`gotten` 大概用法如下
 
@@ -81,7 +81,7 @@ func InYourFunc() {
 }
 ```
 
-用起来还不错，我用它写了个练手项目 [`box-go-sdk`](https://github.com/QSCTech/box-sdk-go)。但总觉得 `API` 不是很优美而且有额外的运行时开销，于是我又糊出了 [`http-service`](https://github.com/rady-io/http-service)，大概这么用：
+用起来还不错，我用它写了个练手项目 [box-go-sdk](https://github.com/QSCTech/box-sdk-go)。但总觉得 `API` 不是很优美而且有额外的运行时开销，于是我又糊出了 [http-service](https://github.com/rady-io/http-service)，大概这么用：
 
 先安装 `go get github.com/rady-io/http-service`，然后确保它在 `PATH` 里再：
 
@@ -159,13 +159,13 @@ type StatBody struct {
 
 再执行 `go generate`，然后同目录下就会出现 `service_impl.go` 文件，里面有个 `serviceImpl` 结构体和 `NewService` 方法，直接拿来用就好了。
 
-看起来挺优雅的，我又糊了个练手项目 [`box-go-sdk-v2`](https://github.com/QSCTech/box-sdk-go/tree/master/v2)。
+看起来挺优雅的，我又糊了个练手项目 [box-go-sdk-v2](https://github.com/QSCTech/box-sdk-go/tree/master/v2)。
 
 但毕竟 `go` 没有 `annotation` 更没有 `annotation processor`，解析注释也不过是旁门左道。
 
 “还是去写 `Java` 吧” —— 我发出了真香的声音。
 
-当然并不能就这样向 `Java` 屈服，我选择了写 `Kotlin`。然后我糊出了 [`unhtml.kt`](https://github.com/Hexilee/unhtml.kt) 。
+当然并不能就这样向 `Java` 屈服，我选择了写 `Kotlin`。然后我糊出了 [unhtml.kt](https://github.com/Hexilee/unhtml.kt) 。
 
 这个专门给 `Kotlin data class` 用的 `HTML Deserializer`，由于比较屎我近期不打算维护/重写所以我没有给文档也没有上传到任何一个包仓库。这里给个例子，感兴趣的人可以去看 `test`
 
@@ -220,7 +220,7 @@ data class SimpleUser(
 
 第一个问题貌似可以用 `annotation processor 解决`，但我不是很喜欢那个接口而且 —— 既然要代码生成我为什么不写宏呢？
 
-于是就有了 [`unhtml.rs`](https://github.com/Hexilee/unhtml.rs) ，这个项目用起来大概是这样：
+于是就有了 [unhtml.rs](https://github.com/Hexilee/unhtml.rs) ，这个项目用起来大概是这样：
 
 ```rust
 #[macro_use]
