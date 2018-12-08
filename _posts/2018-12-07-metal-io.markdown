@@ -1,0 +1,686 @@
+---
+layout:     post
+title:      rust with mio
+subtitle:   "精简的异步 IO 框架"
+date:       2018-12-07 00:27:00
+author:     "Hexi"
+header-img: "img/bg/2018-12-07-metal-io-bg.jpg"
+tags:
+    - rust
+    - async
+    - io
+---
+
+#### 引言
+
+随着 rust 社区生态的蓬勃发展，Rustacean 编程效率的不断提高，学饱了没项目写的 Rustacean 对异步 IO 的呼声日益清晰。在这样的时代背景下，[mio](https://github.com/carllerche/mio) 应运而生，成为了新时代异步 IO 的奠基者 —— 其实这都是几年前的事了。
+
+本文基于 [mio-0.6.16](https://docs.rs/mio/0.6.16/mio/)，虽然 mio 已经趋于稳定，但本文的某些代码还是有可能会过时，请读者注意。随文代码仓库 [Github](https://github.com/Hexilee/mio-demo)。
+
+由于 rust 调 C 的库十分方便，最早接触 rust 异步 io 时我习惯性地想，为啥不直接 bind `libuv` 呢？接触 mio 之后我才意识到，它跟 libuv 完全不是一个抽象层级。mio 只是提供了最基本的操作系统 API 的抽象，而不像 libuv 一样已经可以开箱即用了（虽然无限回调用起来有点难受）。也因如此，mio 可以进行更灵活的封装，同时它也给上层应用提供了更强的 **可拓展性** ，为什么这么说呢，请听我慢慢道来。
+
+随着 `channel`, `timer` 等 `sub module` 在 `0.6.5` 版本被标为 `deprecated`，如今的 mio 提供的唯二的两个核心功能分别是：
+
+- 对操作系统异步网络 IO 的封装
+- 用户自定义的事件队列
+
+第一个核心功能对应到不同操作系统分别是
+
+- `Linux(Android) => epoll`
+- `Windows => iocp`
+- `MacOS(iOS), FreeBSD => kqueue` 
+- `Fuchsia => <unknown>`
+
+mio 把这些不同平台上的 API 封装出了一套 `epoll like` 的异步网络 API，支持 `udp 和 tcp`。
+
+> 除此之外还封装了一些不同平台的拓展 API，如 `unix pipe` 等，本文不对这些 API 做介绍
+
+#### 异步网络 IO
+
+下面是一个 `tcp` 的 `demo`
+
+```rust
+use mio::*;
+use mio::net::{TcpListener, TcpStream};
+use std::io::{Read, Write};
+use std::time::{Duration, Instant};
+
+const SERVER_ACCEPT: Token = Token(0);
+const SERVER: Token = Token(1);
+const CLIENT: Token = Token(2);
+const SERVER_HELLO: &[u8] = b"PING";
+const CLIENT_HELLO: &[u8] = b"PONG";
+
+#[test]
+fn tcp_test() {
+    let addr = "127.0.0.1:13265".parse().unwrap();
+
+// Setup the server socket
+    let server = TcpListener::bind(&addr).unwrap();
+
+// Create a poll instance
+    let poll = Poll::new().unwrap();
+
+// Start listening for incoming connections
+    poll.register(&server, SERVER_ACCEPT, Ready::readable(),
+                  PollOpt::edge()).unwrap();
+
+// Setup the client socket
+    let mut client = TcpStream::connect(&addr).unwrap();
+
+    let mut server_handler = None;
+
+// Register the client
+    poll.register(&client, CLIENT, Ready::readable() | Ready::writable(),
+                  PollOpt::edge()).unwrap();
+
+// Create storage for events
+    let mut events = Events::with_capacity(1024);
+
+    let start = Instant::now();
+    let timeout = Duration::from_millis(10);
+    loop {
+        poll.poll(&mut events, None).unwrap();
+        for event in events.iter() {
+            if start.elapsed() >= timeout {
+                return;
+            }
+            match event.token() {
+                SERVER_ACCEPT => {
+                    let (handler, addr) = server.accept().unwrap();
+                    println!("accept from addr: {}", &addr);
+                    poll.register(&handler, SERVER, Ready::readable() | Ready::writable(), PollOpt::edge()).unwrap();
+                    server_handler = Some(handler);
+                }
+
+                SERVER => {
+                    if event.readiness().is_writable() {
+                        if let Some(ref mut handler) = &mut server_handler {
+                            handler.write(SERVER_HELLO).unwrap();
+                            println!("server wrote");
+                        }
+                    }
+                    if event.readiness().is_readable() {
+                        let mut hello = [0; 4];
+                        if let Some(ref mut handler) = &mut server_handler {
+                            match handler.read_exact(&mut hello) {
+                                Ok(_) => {
+                                    assert_eq!(CLIENT_HELLO, &hello);
+                                    println!("server received");
+                                }
+                                _ => continue
+                            }
+                        }
+                    }
+                }
+                CLIENT => {
+                    if event.readiness().is_writable() {
+                        client.write(CLIENT_HELLO).unwrap();
+                        println!("client wrote");
+                    }
+                    if event.readiness().is_readable() {
+                        let mut hello = [0; 4];
+                        match client.read_exact(&mut hello) {
+                            Ok(_) => {
+                                assert_eq!(SERVER_HELLO, &hello);
+                                println!("client received");
+                            }
+                            _ => continue
+                        }
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+    };
+}
+```
+
+这个 `demo` 稍微有点长，接下来我们把它一步步分解。
+
+直接看主循环
+
+```rust
+fn tcp_test() {
+    // ...
+    loop {
+        poll.poll(&mut events, None).unwrap();
+        // ...
+    }
+}
+```
+
+每次循环都得执行 `poll.poll`，第一个参数是用来存 `events` 的 `Events`， 容量是 `1024`；
+
+```rust
+let mut events = Events::with_capacity(1024);
+```
+
+第二个参数是 `timeout`，即一个 `Option<Duration>`，超时会直接返回。返回类型是 `io::Result<usize>`。
+
+> 其中的 `usize` 代表 `events` 的数量，这个返回值是 `deprecated` 并且会在之后的版本移除，仅供参考
+
+这里我们设置了 `timeout = None`，所以当这个函数返回时，必然是某些事件被触发了。让我们遍历 `events`：
+
+```rust
+ match event.token() {
+     SERVER_ACCEPT => {
+         let (handler, addr) = server.accept().unwrap();
+         println!("accept from addr: {}", &addr);
+         poll.register(&handler, SERVER, Ready::readable() | Ready::writable(), PollOpt::edge()).unwrap();
+         server_handler = Some(handler);
+     }
+    
+     SERVER => {
+         if event.readiness().is_writable() {
+             if let Some(ref mut handler) = &mut server_handler {
+                 handler.write(SERVER_HELLO).unwrap();
+                 println!("server wrote");
+             }
+         }
+         if event.readiness().is_readable() {
+             let mut hello = [0; 4];
+             if let Some(ref mut handler) = &mut server_handler {
+                 match handler.read_exact(&mut hello) {
+                     Ok(_) => {
+                         assert_eq!(CLIENT_HELLO, &hello);
+                         println!("server received");
+                     }
+                     _ => continue
+                 }
+             }
+         }
+     }
+     CLIENT => {
+         if event.readiness().is_writable() {
+             client.write(CLIENT_HELLO).unwrap();
+             println!("client wrote");
+         }
+         if event.readiness().is_readable() {
+             let mut hello = [0; 4];
+             match client.read_exact(&mut hello) {
+                 Ok(_) => {
+                     assert_eq!(SERVER_HELLO, &hello);
+                     println!("client received");
+                 }
+                 _ => continue
+             }
+         }
+     }
+     _ => unreachable!(),
+ }
+```
+
+我们匹配每一个 `event` 的 `token`，这里的 `token` 就是我用来注册的那些 `token`。比如我在上面注册了 `server`
+
+```rust
+// Start listening for incoming connections
+poll.register(&server, SERVER_ACCEPT, Ready::readable(),
+                  PollOpt::edge()).unwrap();
+
+```
+
+第二个参数就是 `token`
+
+```rust
+const SERVER_ACCEPT: Token = Token(0);
+```
+
+这样当 `event.token() == SERVER_ACCEPT` 时，就说明这个事件跟我们注册的 `server` 有关，于是我们试图 `accept` 一个新的连接并把它注册进 `poll`，使用的 `token` 是 `SERVER`。
+
+```rust
+let (handler, addr) = server.accept().unwrap();
+println!("accept from addr: {}", &addr);
+poll.register(&handler, SERVER, Ready::readable() | Ready::writable(), PollOpt::edge()).unwrap();
+server_handler = Some(handler);
+```
+
+这样我们之后如果发现 `event.token() == SERVER`，我们就认为它和注册的 `handler` 有关：
+
+```rust
+if event.readiness().is_writable() {
+   if let Some(ref mut handler) = &mut server_handler {
+       handler.write(SERVER_HELLO).unwrap();
+       println!("server wrote");
+   }
+}
+if event.readiness().is_readable() {
+   let mut hello = [0; 4];
+   if let Some(ref mut handler) = &mut server_handler {
+       match handler.read_exact(&mut hello) {
+           Ok(_) => {
+               assert_eq!(CLIENT_HELLO, &hello);
+               println!("server received");
+           }
+           _ => continue
+       }
+   }
+}
+```
+
+这时候我们还需要判断 `event.readiness()`，这就是 `register` 函数的第三个参数，叫做 `interest`，顾名思义，就是“感兴趣的事”。它的类型是 `Ready`，一共四种，`readable, writable, error 和 hup`，可进行并运算。
+
+在上面我们给 `handler` 注册了 `Ready::readable() | Ready::writable()`，所以 `event` 可能是 `readable` 也可能是 `writable`，所以我们要经过判断来执行相应的逻辑。注意这里的判断是
+
+```rust
+if ... {
+    ...
+}
+
+if ... {
+    ...
+}
+```
+
+而非
+
+```rust
+if ... {
+    ...
+} else if ... {
+    ...
+}
+```
+
+因为一个事件可能同时是 `readable` 和 `writable`。
+
+#### 容错性原则
+
+大概逻辑先讲到这儿，这里先讲一下 `mio` 的“容错性原则”，即不能完全相信 `event`。
+
+可以看到我上面有一段代码是这么写的 
+
+```rust
+match event.token() {
+     SERVER_ACCEPT => {
+         let (handler, addr) = server.accept().unwrap();
+         println!("accept from addr: {}", &addr);
+         poll.register(&handler, SERVER, Ready::readable() | Ready::writable(), PollOpt::edge()).unwrap();
+         server_handler = Some(handler);
+     }
+```
+
+`server.accept()` 返回的是 `io::Result<(TcpStream, SocketAddr)>`。如果我们选择完全相信 `event` 的话，在这里 `unwrap()` 并没有太大问题 —— 如果真的有一个新的连接就绪，`accept()` 产生的 `io::Result` 是我们无法预料且无法处理的，我们应该抛给调用者或者直接 `panic`。
+
+但问题就是，我们可以认为 `event` 的伪消息是可预料的，可能并没有一个新的连接准备就绪，这时候我们 `accept()` 会引发 `WouldBlock Error`。但我们不应该认为 `WouldBlock` 是一种错误 —— 这是一种友善的提醒。`server` 告诉我们：“并没有新的连接，请下次再来吧。”，所以在这里我们应该忽略（可以打个 `log`）它并重新进入循环。
+
+像我之后写的那样：
+
+```rust
+  match client.read_exact(&mut hello) {
+      Ok(_) => {
+          assert_eq!(SERVER_HELLO, &hello);
+          println!("client received");
+      }
+      _ => continue
+  }
+```
+
+#### Poll Option
+
+好了，现在我们可以运行测试：
+
+```bash
+[mio-demo] cargo test -- --nocapture
+```
+
+terminal 里打印出了
+
+```bash
+client wrote
+accept from addr: 127.0.0.1:53205
+client wrote
+server wrote
+server received
+...
+```
+
+我们可以发现，在短短的 `10 millis` 内（`let timeout = Duration::from_millis(10);`），`server` 和 `client` 分别进行了数十次的读写！
+
+如果我们不想进行这么多次读写呢？比如，我们只想让 `server` 写一次。在网络比较通畅的情况下，`client` 和 `server` 几乎一直是可写的，所以 `Poll::poll` 在数微秒内就返回了。
+
+这时候就要看 `register` 的第四个参数了。
+
+
+```rust
+poll.register(&server, SERVER_ACCEPT, Ready::readable(),
+                  PollOpt::edge()).unwrap();
+
+```
+
+`PollOpt::edge()` 的类型是 `PollOpt`，一共有 `level, edge, oneshot` 三种，他们有什么区别呢？
+
+比如在我上面的代码里，
+
+```rust
+if event.readiness().is_readable() {
+    let mut hello = [0; 4];
+    match client.read_exact(&mut hello) {
+        Ok(_) => {
+            assert_eq!(SERVER_HELLO, &hello);
+            println!("client received");
+        }
+        _ => continue
+    }
+}
+```
+
+我在收到一个 `readable readiness` 时，只读了四个字节。如果这时候缓冲区里有八字节的数据，那么：
+
+- 如果我注册时使用 `PollOpt::level()`，我在下次 `poll` 时 **一定** 还能收到一次 `readable readiness event`；
+- 如果我注册时使用 `PollOpt::edge()`，我在下次 `poll` 时 **不一定** 还能收到一次 `readable readiness event`；
+
+所以，使用 `PollOpt::edge()` 时有一个“排水原则”，即每次触发 `event` 时一定要操作到资源耗尽返回 `WouldBlock`，即上面的代码要改成：
+
+```rust
+if event.readiness().is_readable() {
+    let mut hello = [0; 4];
+    loop {
+        match client.read_exact(&mut hello) {
+            Ok(_) => {
+                assert_eq!(SERVER_HELLO, &hello);
+                println!("client received");
+            }
+            _ => break
+        }
+    }
+}
+```
+
+那么，`oneshot` 又是怎样的行为呢？让我们回到上面的问题，如果我们只想让 `handler` 写一次，怎么办 —— 注册时使用 `PollOpt::oneshot()`，即
+
+```rust
+let (handler, addr) = server.accept().unwrap();
+println!("accept from addr: {}", &addr);
+poll.register(&handler, SERVER, Ready::readable(), PollOpt::edge()).unwrap();
+poll.register(&handler, SERVER_WRITE, Ready::writable(), PollOpt::oneshot()).unwrap();
+server_handler = Some(handler);
+```
+
+这样的话，你只能收到一次 `SERVER_WRITE` 事件，除非你使用 `Poll::reregister` 重新注册 `handler`。
+
+> `Poll::reregister` 可以更改 `PollOpt` 和 `interest`
+
+
+#### Still Block
+
+其实上面这个 `demo` 还存在一个问题，即我们在回调代码块中使用了同步的 `IO` 操作 `println!`。我们要尽可能避免在回调的代码块里使用耗时的 `IO` 操作。
+
+考虑到文件 `IO` (包括 `Stdin, Stdout, Stderr`) 速度很慢，我们只需要把所有的文件 `IO` 交给一个线程进行即可。
+
+```rust
+use std::sync::mpsc::{Sender, Receiver, channel, SendError};
+
+#[derive(Clone)]
+pub struct Fs {
+    task_sender: Sender<Task>,
+}
+
+impl Fs {
+    pub fn new() -> Self {
+        let (sender, receiver) = channel();
+        std::thread::spawn(move || {
+            loop {
+                match receiver.recv() {
+                    Ok(task) => {
+                        match task {
+                            Task::Println(ref string) => println!("{}", string),
+                            Task::Exit => return
+                        }
+                    },
+                    Err(_) => {
+                        return;
+                    }
+                }
+            }
+        });
+        Fs { task_sender: sender }
+    }
+
+    pub fn println(&self, string: String) {
+        self.task_sender.send(Task::Println(string)).unwrap()
+    }
+}
+
+pub enum Task {
+    Exit,
+    Println(String),
+}
+```
+
+之后，使用 `Fs::println` 替换所有的 `println!`
+
+```rust
+use super::fs::Fs;
+use mio::*;
+use mio::net::{TcpListener, TcpStream};
+use std::io::{Read, Write};
+use std::time::{Duration, Instant};
+
+const SERVER_ACCEPT: Token = Token(0);
+const SERVER: Token = Token(1);
+const CLIENT: Token = Token(2);
+const SERVER_HELLO: &[u8] = b"PING";
+const CLIENT_HELLO: &[u8] = b"PONG";
+
+#[test]
+fn tcp_test() {
+    let addr = "127.0.0.1:13265".parse().unwrap();
+
+// Setup the server socket
+    let server = TcpListener::bind(&addr).unwrap();
+
+// Create a poll instance
+    let poll = Poll::new().unwrap();
+
+// Start listening for incoming connections
+    poll.register(&server, SERVER_ACCEPT, Ready::readable(),
+                  PollOpt::edge()).unwrap();
+
+// Setup the client socket
+    let mut client = TcpStream::connect(&addr).unwrap();
+
+    let mut server_handler = None;
+
+// Register the client
+    poll.register(&client, CLIENT, Ready::readable() | Ready::writable(),
+                  PollOpt::edge()).unwrap();
+
+// Create storage for events
+    let mut events = Events::with_capacity(1024);
+
+    let start = Instant::now();
+    let timeout = Duration::from_millis(10);
+    let fs = Fs::new();
+    loop {
+        poll.poll(&mut events, None).unwrap();
+        for event in events.iter() {
+            if start.elapsed() >= timeout {
+                return;
+            }
+            match event.token() {
+                SERVER_ACCEPT => {
+                    let (handler, addr) = server.accept().unwrap();
+                    fs.clone().println(format!("accept from addr: {}", &addr));
+                    poll.register(&handler, SERVER, Ready::readable() | Ready::writable(), PollOpt::edge()).unwrap();
+                    server_handler = Some(handler);
+                }
+
+                SERVER => {
+                    if event.readiness().is_writable() {
+                        if let Some(ref mut handler) = &mut server_handler {
+                            handler.write(SERVER_HELLO).unwrap();
+                            fs.clone().println("server wrote".to_string());
+                        }
+                    }
+                    if event.readiness().is_readable() {
+                        let mut hello = [0; 4];
+                        if let Some(ref mut handler) = &mut server_handler {
+                            match handler.read_exact(&mut hello) {
+                                Ok(_) => {
+                                    assert_eq!(CLIENT_HELLO, &hello);
+                                    fs.clone().println("server received".to_string());
+                                }
+                                _ => continue
+                            }
+                        }
+                    }
+                }
+                CLIENT => {
+                    if event.readiness().is_writable() {
+                        client.write(CLIENT_HELLO).unwrap();
+                        fs.clone().println("client wrote".to_string());
+                    }
+                    if event.readiness().is_readable() {
+                        let mut hello = [0; 4];
+                        match client.read_exact(&mut hello) {
+                            Ok(_) => {
+                                assert_eq!(SERVER_HELLO, &hello);
+                                fs.clone().println("client received".to_string());
+                            }
+                            _ => continue
+                        }
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+    };
+}
+```
+
+#### 自定义事件
+
+
+上面我们实现异步 `println` 比较简单，这是因为 `println` 并没有返回值，不需要进行后续操作。设想一下，如果要我们实现 `open` 和 `ready_to_string`，先异步地 `open` 一个文件，然后异步地 `read_to_string`，最后再异步地 `println`, 我们要怎么做？
+
+最简单的写法是回调，像这样：
+
+```rust
+use crossbeam_channel::{unbounded, Sender};
+use std::fs::File;
+use std::io::Read;
+use std::boxed::FnBox;
+
+#[derive(Clone)]
+pub struct Fs {
+    task_sender: Sender<Task>,
+}
+
+impl Fs {
+    pub fn new() -> Self {
+        let (task_sender, task_receiver) = unbounded();
+        let (result_sender, result_receiver) = unbounded();
+        std::thread::spawn(move || {
+            loop {
+                match task_receiver.recv() {
+                    Ok(task) => {
+                        match task {
+                            Task::Println(ref string) => println!("{}", string),
+                            Task::Open(path, callback, fs) => {
+                                result_sender
+                                    .send(TaskResult::Open(File::open(path).unwrap(), callback, fs))
+                                    .unwrap();
+                            }
+                            Task::ReadToString(mut file, callback, fs) => {
+                                let mut value = String::new();
+                                file.read_to_string(&mut value).unwrap();
+                                result_sender
+                                    .send(TaskResult::ReadToString(value, callback, fs))
+                                    .unwrap()
+                            }
+                            Task::Exit => {
+                                result_sender
+                                    .send(TaskResult::Exit)
+                                    .unwrap();
+                                return;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        return;
+                    }
+                }
+            }
+        });
+
+        std::thread::spawn(move || {
+            loop {
+                match result_receiver.recv() {
+                    Ok(result) => {
+                        match result {
+                            TaskResult::ReadToString(value, callback, fs) => callback(value, fs),
+                            TaskResult::Open(file, callback, fs) => callback(file, fs),
+                            TaskResult::Exit => return
+                        }
+                    }
+                    Err(_) => {
+                        return;
+                    }
+                }
+            }
+        });
+
+        Fs { task_sender }
+    }
+
+    pub fn println(&self, string: String) {
+        self.task_sender.send(Task::Println(string)).unwrap()
+    }
+
+    pub fn open<F: FnOnce(File, Fs) + Send + 'static>(&self, path: &str, callback: F) {
+        self.task_sender.send(Task::Open(path.to_string(), Box::new(callback), self.clone())).unwrap()
+    }
+
+    pub fn read_to_string<F: FnOnce(String, Fs) + Send + 'static>(&self, file: File, callback: F) {
+        self.task_sender.send(Task::ReadToString(file, Box::new(callback), self.clone())).unwrap()
+    }
+
+    pub fn close(&self) {
+        self.task_sender.send(Task::Exit).unwrap()
+    }
+}
+
+type FileCallback = Box<FnBox(File, Fs) + Send>;
+type StringCallback = Box<FnBox(String, Fs) + Send>;
+
+pub enum Task {
+    Exit,
+    Println(String),
+    Open(String, FileCallback, Fs),
+    ReadToString(File, StringCallback, Fs),
+}
+
+pub enum TaskResult {
+    Exit,
+    Open(File, FileCallback, Fs),
+    ReadToString(String, StringCallback, Fs),
+}
+
+const TEST_FILE_VALUE: &str = "Hello, World!";
+
+#[test]
+fn test_fs() {
+    let fs = Fs::new();
+    fs.open("./src/test.txt", |file, fs| {
+        fs.read_to_string(file, |value, fs| {
+            assert_eq!(TEST_FILE_VALUE, &value);
+            fs.println(value);
+            fs.close();
+        })
+    });
+}
+```
+
+测试
+
+```bash
+[mio-demo] cargo test -- --nocapture
+```
+
+这样写在逻辑上的确是对的，但是负责跑 `callback` 的 `executor` 线程其实被负责 `io` 的线程阻塞住了（`result_receiver.recv()`）。那我们能不能在 `executor` 线程里跑一个事件循环，以达到不被 `io` 线程阻塞的目的呢？（即确定 `result_receiver` 中有 `result` 时，`executor` 才会进行 `result_receiver.recv()`）
+
+这里就体现出了 `mio` 强大的可拓展性：注册用户态的事件队列。
+
+把上面的代码稍加修改，就成了这样：
+
