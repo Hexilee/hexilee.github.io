@@ -60,7 +60,7 @@ fn main() -> Result<(), Error> {
 
 写这篇文章的主要目的是梳理和总结，同时也希望能给对这方面有兴趣的 `Rustacean` 作为参考。本文代码以易于理解为主要编码原则，某些地方并没有太考虑性能，还请见谅；但如果文章和代码中有明显错误，欢迎指正。
 
-本文代码仓库在 [Github](https://github.com/Hexilee/async-io-demo)，所有 `examples` 在 `nightly-x86_64-apple-darwin 2018 Edition` 上均能照常运行。运行 `example/async-echo`  时设置 `RUST_LOG` 为 `info` 可以在 terminal 看到基本的运行信息，`debug` 则可见事件循环中的事件触发顺序。
+本文代码仓库在 [Github](https://github.com/Hexilee/async-io-demo)，所有 `examples` 在 `nightly-x86_64-apple-darwin 2018 Edition` 上均能正常运行。运行 `example/async-echo`  时设置 `RUST_LOG` 为 `info` 可以在 terminal 看到基本的运行信息，`debug` 则可见事件循环中的事件触发顺序。
 
 ### 异步 `IO` 的基石 - `mio`
 
