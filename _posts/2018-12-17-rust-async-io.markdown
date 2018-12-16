@@ -16,7 +16,7 @@ Table of Contents
 =================
 
 * [引言](#引言)
-* [异步 IO 的基石 - <code>mio</code>](#异步-io-的基石---mio)
+* [异步 IO 的基石 - mio](#异步-io-的基石---mio)
     * [异步网络 IO](#异步网络-io)
     * [容错性原则](#容错性原则)
     * [Poll Option](#poll-option)
