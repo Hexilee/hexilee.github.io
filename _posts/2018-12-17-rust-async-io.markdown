@@ -1446,4 +1446,4 @@ RUST_LOG=info cargo run --example async-echo
 
 我目前发现的主要问题就是不能在 `Future::poll` 或者 `async` 中使用 `try`，导致出现 `Result` 的地方只能 `match`，希望之后会有比较好的解决方案。
 
-第二个问题是 `Waker` 最里面装的是 `UnsafeWaker`的 `NonNull` 指针，当然我能理解 `rust` 团队有性能等其它方面的考虑，但如果用 `mio` 的 `set_readiness` 封装出 `MyWaker` 的话，`clone` 完全不需要 `NonNull`，而且我在实际编码时因为这个出过空指针错误。。希望以后能提供一个更安全的解决方案。
+第二个问题是 `Waker` 最里面装的是 `UnsafeWaker`的 `NonNull` 指针，当然我能理解 `rust` 团队有性能等其它方面的考虑，但如果用 `mio` 的 `set_readiness` 封装出 `MyWaker` 的话，`clone` 完全不需要 `NonNull`，而且我在实际编码时因为这个出过空指针错误。。希望以后能提供一个更安全的选择。
