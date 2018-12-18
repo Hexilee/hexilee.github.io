@@ -45,7 +45,7 @@ Table of Contents
 
 2018 年接近尾声，`rust` 团队勉强立住了异步 `IO` 的 flag，`async` 成为了关键字，`Pin`, `Future`, `Poll` 和 `await!` 也进入了标准库。不过一直以来实际项目中用不到这套东西，所以也没有主动去了解过。
 
-最近心血来潮想用 `rust` 写点东西，但并找不到比较能看的文档（可能是因为 `rust` 发展太快了，很多都过时了），最后参考[这篇文章](https://cafbit.com/post/tokio_internals/)和 `"new tokio"`( [romio](https://github.com/Hexilee/async-io-demo) ) 写了几个 `demo`，并基于 `mio` 在 `coroutine` 中实现了简陋的异步 `IO`。
+最近心血来潮想用 `rust` 写点东西，但并找不到比较能看的文档（可能是因为 `rust` 发展太快了，很多都过时了），最后参考[这篇文章](https://cafbit.com/post/tokio_internals/)和 `"new tokio"`( [romio](https://github.com/withoutboats/romio) ) 写了几个 `demo`，并基于 `mio` 在 `coroutine` 中实现了简陋的异步 `IO`。
 
 最终效果如下：
 
@@ -1447,3 +1447,4 @@ RUST_LOG=info cargo run --example async-echo
 我目前发现的主要问题就是不能在 `Future::poll` 或者 `async` 中使用 `try`，导致出现 `Result` 的地方只能 `match`，希望之后会有比较好的解决方案。
 
 第二个问题是 `Waker` 最里面装的是 `UnsafeWaker`的 `NonNull` 指针，当然我能理解 `rust` 团队有性能等其它方面的考虑，但如果用 `mio` 的 `set_readiness` 封装出 `MyWaker` 的话，`clone` 完全不需要 `NonNull`，而且我在实际编码时因为这个出过空指针错误。。希望以后能提供一个更安全的选择。
+
