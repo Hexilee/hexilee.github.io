@@ -7,7 +7,7 @@ author:     "Hexi"
 header-img: "img/bg/2018-09-27-animal-sniffer-bg.jpg"
 tags:
     - JVM
-    - Compatibility
+    - compatibility
     - API
 ---
 

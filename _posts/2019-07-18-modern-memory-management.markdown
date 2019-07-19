@@ -6,9 +6,9 @@ date:       2019-07-18 19:48:00
 author:     "Hexi"
 header-img: "img/bg/2019-07-18-modern-memory-management.jpg"
 tags:
-    - Rust
-    - Cpp
-    - momery-management
+    - rust
+    - cpp
+    - momery management
 ---
 
 Rust 自诞生起就以它独特、现代化的内存管理机制闻名于世；而其指定的竞争对手 Cpp 自 C++11 以来在内存管理现代化的道路上也下了很大功夫。笔者平时写 Rust 比较多，最近在写 Cpp 便试图给脑中零散的概念做个总结，并使用 Rust 与其作对比，也算是一篇面向 Cpp 用户的 Rust 推销文章吧。

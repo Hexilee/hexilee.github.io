@@ -6,7 +6,7 @@ date:       2019-05-05 13:52:00
 author:     "Hexi"
 tags:
     - rust
-    - 线程安全
+    - thread safety
 ---
 ### 如何理解 Sync、Send？
 

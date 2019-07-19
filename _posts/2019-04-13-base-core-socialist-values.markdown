@@ -6,7 +6,7 @@ date:       2019-04-13 23:52:00
 author:     "Hexi"
 header-img: "2019-04-13-base-core-socialist-values.png"
 tags:
-    - Encoding
+    - encoding
 ---
 
 我和可奥
