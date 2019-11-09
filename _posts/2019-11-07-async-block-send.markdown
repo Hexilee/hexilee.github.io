@@ -179,15 +179,17 @@ foo(::alloc::fmt::format(::core::fmt::Arguments::new_v1(
 
 -  [rust-lang/rust#64856](https://github.com/rust-lang/rust/pull/64856) 提出了一份新的 format 实现，该 PR 目前合并进程被阻塞，但你可以手动实现一份来覆盖标准库实现：
 
+  {% raw %}
+  
   ```rust
   // examples/format-override.rs
   extern crate alloc;
   
   macro_rules! format {
-      ($($arg:tt)*) => \{{
+      ($($arg:tt)*) => {{
           let res = alloc::fmt::format(alloc::__export::format_args!($($arg)*));
           res
-      }\}
+      }}
   }
   
   async fn foo(_: String) {}
@@ -198,13 +200,15 @@ foo(::alloc::fmt::format(::core::fmt::Arguments::new_v1(
       }
   }
   
-  fn main() {}
+fn main() {}
   ```
 
+  {% endraw %}
+  
   尝试运行：
 
   ```bash
   cargo +nightly-2019-11-05 run --example format-override
   ```
-
+  
   通过。
