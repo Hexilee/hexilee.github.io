@@ -184,10 +184,10 @@ foo(::alloc::fmt::format(::core::fmt::Arguments::new_v1(
   extern crate alloc;
   
   macro_rules! format {
-      ($($arg:tt)*) => {{
+      ($($arg:tt)*) => \{{
           let res = alloc::fmt::format(alloc::__export::format_args!($($arg)*));
           res
-      }}
+      }\}
   }
   
   async fn foo(_: String) {}
