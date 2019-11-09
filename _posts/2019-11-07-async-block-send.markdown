@@ -10,12 +10,11 @@ tags:
     - async
 ---
 
+本文旨在总结并解释  [rust-lang/rust#64477](https://github.com/rust-lang/rust/issues/64477) 和 [ rust-lang/rust#64856](https://github.com/rust-lang/rust/pull/64856)。本文代码地址：[Github](https://github.com/Hexilee/async-block-send)。
 
-This blog aims to summarize and explain [rust-lang/rust#64477](https://github.com/rust-lang/rust/issues/64477) and [ rust-lang/rust#64856](https://github.com/rust-lang/rust/pull/64856).
+### 引言
 
-### Introduction
-
-If you are using rust nightly toolchain between 2019-09-11 and 2019-11-05(latest), you will fail to compile this code:
+如果你正在使用 2019-09-11 到 2019-11-05（最新）版本的 rust nightly 工具链，你会发现下面这段代码无法通过编译：
 
 ```rust
 // examples/format.rs
@@ -30,13 +29,13 @@ fn bar() -> impl Send {
 fn main() {}
 ```
 
-Run it:
+尝试运行:
 
 ```bash
 cargo +nightly-2019-09-11 run --example format
 ```
 
-Compiler complains:
+编译报错:
 
 ```bash
 error[E0277]: `*mut (dyn std::ops::Fn() + 'static)` cannot be shared between threads safely
@@ -67,11 +66,11 @@ To learn more, run the command again with --verbose.
 
 
 
-So, what's the problem of that code?
+所以，这段代码到底有啥毛病呢？
 
-### Spurious Send Required
+### 多余的 `Send` 约束
 
-Let's look at a simpler code:
+让我们来看一段更简单的代码：
 
 ```rust
 // examples/spurious-send.rs
@@ -89,13 +88,13 @@ pub fn g<T: Sync>(x: &'static T) -> impl Future<Output = ()> + Send {
 fn main() {}
 ```
 
-Run it:
+尝试运行:
 
 ```bash
 cargo +nightly-2019-09-11 run --example spurious-send
 ```
 
-Compiler complains:
+编译报错:
 
 ```bash
 error[E0277]: `T` cannot be sent between threads safely
@@ -120,19 +119,17 @@ error: Could not compile `async-block-send`.
 To learn more, run the command again with --verbose.
 ```
 
-It's strange, isn't it? As we all know,  `T: Sync => &T: Send`, that code  should works. `T: Send` is unnecessary because there is no `T` value in async block.
+这段报错信息令人匪夷所思。众所周知，如果 `T: Sync`，则有 `&T: Send`，所以这段代码应该是没问题的。`T: Send` 是不必要的，因为 async 块中不存在 `T` 类型的变量。
 
-This bug is introduced in nightly-09-11 and fixed by [rust-lang/rust#64584](https://github.com/rust-lang/rust/pull/64584), that code works now:
+这个 bug 是 nightly-09-11 中引入的，并且已被 [rust-lang/rust#64584](https://github.com/rust-lang/rust/pull/64584) 修复，所以最新的工具链是能够编译运行这段代码的：
 
 ```bash
 cargo +nightly-2019-11-05 run --example spurious-send
 ```
 
-However, you still cannot use format in `await` expression.
+不过，在含 `.await` 的语句中依然无法使用 `format` 宏。
 
 ### format
-
-What's the problem with this code:
 
 ```rust
 // examples/format.rs
@@ -147,7 +144,7 @@ fn bar() -> impl Send {
 fn main() {}
 ```
 
-macro format will  expand `format!("")` into:
+`format` 宏会把 `format("")`展开成：
 
 ```rust
 ::alloc::fmt::format(::core::fmt::Arguments::new_v1(
@@ -158,7 +155,7 @@ macro format will  expand `format!("")` into:
         )))
 ```
 
-This expression generate some temporaries that do not implement `Send`, like `std::fmt::ArgumentV1`, `&core::fmt::Void`. And, these temporaries stay alive at the end of current expression.
+这串表达式尝试了一些没有实现 `Send` 的临时变量，像  `std::fmt::ArgumentV1`, `&core::fmt::Void` 类型的变量。并且，这些临时变量会在当前语句结束之后才会被析构。
 
 ```rust
 foo(::alloc::fmt::format(::core::fmt::Arguments::new_v1(
@@ -170,19 +167,17 @@ foo(::alloc::fmt::format(::core::fmt::Arguments::new_v1(
 ^^^^^^^^^^^^^^^^^^^^^^ temporaries stay alive
 ```
 
-So, these temporaries across 'await', which means they will be stored as field of a stackless generator (the `GenFuture` returned by async block).
+所以，这些临时变量的生命期跨过了一次 `await`，这意味着它们会被作为无栈协程（由 async 块返回的 `GenFuture`）的一个字段存下来。
 
-> Read this [blog](https://github.com/Hexilee/async-io-demo#generator) for more contents about generator.
+> 可以阅读这篇[博客](https://hexilee.me/2018/12/17/rust-async-io/)来了解有关 generator 的更多内容。
 
-Eventually, `GenFuture: !Send` conflicts against `impl Send`.
+最终，这些没有实现 `Send`的临时变量会导致 `GenFuture: !Send`，这与函数返回类型  `impl Send`产生了冲突。
 
-### Solution
+### 解决方案
 
-- Spurious send required was fixed by [rust-lang/rust#64584](https://github.com/rust-lang/rust/pull/64584), which was merged into master branch.
+- 多余的 `Send`约束问题已被  [rust-lang/rust#64584](https://github.com/rust-lang/rust/pull/64584) 解决，目前这个 PR　已经合入了 master 分区，并已经在最新的 nightly 工具链中生效。
 
-- Temporaries scoped `format` was implemented by [rust-lang/rust#64856](https://github.com/rust-lang/rust/pull/64856), but merging is blocked.
-
-  You can override `format` by yourself, there is a polyfill:
+-  [rust-lang/rust#64856](https://github.com/rust-lang/rust/pull/64856) 提出了一份新的 format 实现，该 PR 目前合并进程被阻塞，但你可以手动实现一份来覆盖标准库实现：
 
   ```rust
   // examples/format-override.rs
@@ -206,10 +201,10 @@ Eventually, `GenFuture: !Send` conflicts against `impl Send`.
   fn main() {}
   ```
 
-  Run it:
+  尝试运行：
 
   ```bash
   cargo +nightly-2019-11-05 run --example format-override
   ```
 
-  Pass.
+  通过。
