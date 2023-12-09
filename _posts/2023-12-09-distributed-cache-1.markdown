@@ -29,13 +29,14 @@ tags:
 - 可以充分利用多核来提高 IOPS
 - 适用工作模式：TCP 连接数跟系统线程一致，每个连接由两个线程分别负责读写并解包/封包，再把包交给其它线程处理
 
-### zero-copy 的优势
+### zero-copy 的特点
 
 - 数据拷贝全由 DMA 完成，节省 CPU，增加网络 IOPS
-- 数据盘和消费端无瓶颈
+- 需要数据盘和消费端无瓶颈
 - 适用场景：数据全内存缓存，消费端使用用户态 SDK（非 FUSE）
 
 ### Rust 实现 zero-copy
 
 - IO runtime 没有抢占式调度，sendfile/splice 不能在 runtime 线程池内运行
+- 对于已经主存中的数据，spwan 到 IO 线程里 splice 反而是负优化
 - Page cache 全缓存或内存盘情况下可用，或是纯内存缓存使用 vmsplice
